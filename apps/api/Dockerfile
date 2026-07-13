@@ -14,4 +14,4 @@ COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
 COPY scripts ./scripts
 EXPOSE 4000
-CMD ["node", "dist/index.js"]
+CMD ["sh", "-c", "node scripts/migrate.js && node dist/index.js"]
