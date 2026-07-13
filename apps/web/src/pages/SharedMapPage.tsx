@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, GeoFeature, GeoFeatureCollection, LayerDto, MapDto } from "../api/client";
 import MapCanvas from "../components/MapCanvas";
+import PrintMapModal from "../components/PrintMapModal";
 
 export default function SharedMapPage() {
   const { token } = useParams<{ token: string }>();
@@ -10,6 +11,7 @@ export default function SharedMapPage() {
   const [featuresByLayer, setFeaturesByLayer] = useState<Record<string, GeoFeatureCollection>>({});
   const [popup, setPopup] = useState<{ layer: LayerDto; feature: GeoFeature } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [printOpen, setPrintOpen] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -36,7 +38,12 @@ export default function SharedMapPage() {
       <header className="app-header">
         <div className="logo">GISNEXUS</div>
         <div className="map-title">{map.name}</div>
-        <span className="badge">Read-only</span>
+        <div className="header-actions">
+          <button className="btn" onClick={() => setPrintOpen(true)}>
+            🖨️ Print as PDF
+          </button>
+          <span className="badge">Read-only</span>
+        </div>
       </header>
       <div className="map-wrap shared-map-wrap">
         <MapCanvas
@@ -65,6 +72,17 @@ export default function SharedMapPage() {
           </div>
         )}
       </div>
+
+      {printOpen && (
+        <PrintMapModal
+          map={map}
+          layers={layers}
+          featuresByLayer={featuresByLayer}
+          shareUrl={window.location.href}
+          cartographer={null}
+          onClose={() => setPrintOpen(false)}
+        />
+      )}
     </div>
   );
 }

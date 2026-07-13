@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, GeoFeature, GeoFeatureCollection, LayerDto, MapDto, MapVisibility } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 import MapCanvas from "../components/MapCanvas";
 import LayerList from "../components/LayerList";
 import StylePanel from "../components/StylePanel";
@@ -10,6 +11,7 @@ import DataTable from "../components/DataTable";
 import DashboardChart from "../components/DashboardChart";
 import AnalysisPanel from "../components/AnalysisPanel";
 import AddDataPanel from "../components/AddDataPanel";
+import PrintMapModal from "../components/PrintMapModal";
 import { CatalogEntry } from "../lib/serviceCatalog";
 
 type BottomTab = "table" | "dashboard" | "analysis";
@@ -17,6 +19,7 @@ type BottomTab = "table" | "dashboard" | "analysis";
 export default function MapEditorPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [map, setMap] = useState<MapDto | null>(null);
   const [role, setRole] = useState<string>("viewer");
@@ -29,6 +32,7 @@ export default function MapEditorPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [printOpen, setPrintOpen] = useState(false);
   const [addDataOpen, setAddDataOpen] = useState(false);
 
   const canEdit = role === "owner" || role === "editor";
@@ -293,11 +297,32 @@ export default function MapEditorPage() {
                 </button>
               </div>
             )}
-            <button className="btn" style={{ marginTop: 16 }} onClick={() => setShareOpen(false)}>
+            <button
+              className="btn"
+              style={{ marginTop: 16, width: "100%" }}
+              onClick={() => {
+                setShareOpen(false);
+                setPrintOpen(true);
+              }}
+            >
+              🖨️ Print map as PDF
+            </button>
+            <button className="btn" style={{ marginTop: 10 }} onClick={() => setShareOpen(false)}>
               Close
             </button>
           </div>
         </div>
+      )}
+
+      {printOpen && (
+        <PrintMapModal
+          map={map}
+          layers={visibleLayers}
+          featuresByLayer={featuresByLayer}
+          shareUrl={map.visibility !== "private" && map.share_token ? `${window.location.origin}/share/${map.share_token}` : null}
+          cartographer={user?.name || user?.email || null}
+          onClose={() => setPrintOpen(false)}
+        />
       )}
 
       {addDataOpen && <AddDataPanel onAdd={handleAddService} onClose={() => setAddDataOpen(false)} />}
