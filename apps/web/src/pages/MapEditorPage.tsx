@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, GeoFeature, GeoFeatureCollection, LayerDto, MapDto, MapVisibility } from "../api/client";
-import { useAuth } from "../context/AuthContext";
 import MapCanvas from "../components/MapCanvas";
 import LayerList from "../components/LayerList";
 import StylePanel from "../components/StylePanel";
@@ -19,7 +18,6 @@ type BottomTab = "table" | "dashboard" | "analysis";
 export default function MapEditorPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
 
   const [map, setMap] = useState<MapDto | null>(null);
   const [role, setRole] = useState<string>("viewer");
@@ -320,7 +318,6 @@ export default function MapEditorPage() {
           layers={visibleLayers}
           featuresByLayer={featuresByLayer}
           shareUrl={map.visibility !== "private" && map.share_token ? `${window.location.origin}/share/${map.share_token}` : null}
-          cartographer={user?.name || user?.email || null}
           onClose={() => setPrintOpen(false)}
         />
       )}

@@ -9,9 +9,6 @@ interface Props {
   featuresByLayer: Record<string, GeoFeatureCollection>;
   // null when there's no public/unlisted link to point the QR code at yet.
   shareUrl: string | null;
-  // Owner/creator display name for the "Credits" element — null when unknown
-  // (e.g. an anonymous visitor printing a publicly shared map).
-  cartographer: string | null;
   onClose: () => void;
 }
 
@@ -45,7 +42,7 @@ function pickScale(lat: number, zoom: number) {
 // convention (title, legend, scale, north arrow, neatline, credits/labels) —
 // see https://www.spatialpost.com/basic-map-elements/ — plus a QR code
 // linking back to the live, interactive version.
-export default function PrintMapModal({ map, layers, featuresByLayer, shareUrl, cartographer, onClose }: Props) {
+export default function PrintMapModal({ map, layers, featuresByLayer, shareUrl, onClose }: Props) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const printedAt = useMemo(() => new Date(), []);
   const scale = useMemo(() => pickScale(map.view_state.center[1], map.view_state.zoom), [map.view_state]);
@@ -139,11 +136,6 @@ export default function PrintMapModal({ map, layers, featuresByLayer, shareUrl, 
               <b>Data sources:</b> © OpenStreetMap contributors{dataCredits.length ? `, ${dataCredits.join(", ")}` : ""}.
             </div>
             <div>
-              {cartographer && (
-                <>
-                  <b>Cartographer:</b> {cartographer} &nbsp;·&nbsp;
-                </>
-              )}
               <b>Created:</b> {new Date(map.created_at).toLocaleDateString()} &nbsp;·&nbsp; <b>Printed:</b>{" "}
               {printedAt.toLocaleDateString()}
             </div>

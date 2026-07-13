@@ -79,7 +79,6 @@ export default function SharedMapPage() {
           layers={layers}
           featuresByLayer={featuresByLayer}
           shareUrl={window.location.href}
-          cartographer={null}
           onClose={() => setPrintOpen(false)}
         />
       )}
