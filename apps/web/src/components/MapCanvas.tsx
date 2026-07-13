@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import maplibregl, { LngLatBoundsLike, Map as MapLibreMap, MapMouseEvent } from "maplibre-gl";
+import maplibregl, { LngLatBoundsLike, Map as MapLibreMap, MapLayerMouseEvent  } from "maplibre-gl";
 import { GeoFeature, GeoFeatureCollection, LayerDto } from "../api/client";
 
 // A free, no-API-key raster basemap. Swap for a vector style + MapTiler/Stadia
@@ -199,7 +199,7 @@ export default function MapCanvas({ layers, featuresByLayer, viewState, onViewSt
   function attachClickHandler(mapLayerId: string, layer: LayerDto) {
     const map = mapRef.current;
     if (!map) return;
-    map.on("click", mapLayerId, (e: MapMouseEvent) => {
+    map.on("click", mapLayerId, (e: MapLayerMouseEvent ) => {
       const feature = e.features?.[0];
       if (!feature) return;
       onFeatureClick(layer, feature as unknown as GeoFeature, [e.lngLat.lng, e.lngLat.lat]);
