@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gisnexus
+      POSTGRES_PASSWORD: gisnexus
+      POSTGRES_DB: gisnexus
+    ports:
+      - "5432:5432"
+    volumes:
+      - gisnexus_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gisnexus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./apps/api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://gisnexus:gisnexus@db:5432/gisnexus
+      JWT_SECRET: dev-only-secret-change-me
+      PORT: 4000
+      CORS_ORIGIN: http://localhost:5173
+      MAX_UPLOAD_MB: 25
+    ports:
+      - "4000:4000"
+    command: sh -c "node scripts/migrate.js && node dist/index.js"
+
+  web:
+    build:
+      context: ./apps/web
+      args:
+        VITE_API_URL: http://localhost:4000
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+
+volumes:
+  gisnexus_db_data:

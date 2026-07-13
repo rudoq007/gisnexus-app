@@ -1,0 +1,306 @@
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { api, GeoFeature, GeoFeatureCollection, LayerDto, MapDto, MapVisibility } from "../api/client";
+import MapCanvas from "../components/MapCanvas";
+import LayerList from "../components/LayerList";
+import StylePanel from "../components/StylePanel";
+import PopupConfigPanel from "../components/PopupConfigPanel";
+import UploadButton from "../components/UploadButton";
+import DataTable from "../components/DataTable";
+import DashboardChart from "../components/DashboardChart";
+import AnalysisPanel from "../components/AnalysisPanel";
+import AddDataPanel from "../components/AddDataPanel";
+import { CatalogEntry } from "../lib/serviceCatalog";
+
+type BottomTab = "table" | "dashboard" | "analysis";
+
+export default function MapEditorPage() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  const [map, setMap] = useState<MapDto | null>(null);
+  const [role, setRole] = useState<string>("viewer");
+  const [layers, setLayers] = useState<LayerDto[]>([]);
+  const [featuresByLayer, setFeaturesByLayer] = useState<Record<string, GeoFeatureCollection>>({});
+  const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set());
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [tab, setTab] = useState<BottomTab>("table");
+  const [popup, setPopup] = useState<{ layer: LayerDto; feature: GeoFeature; lngLat: [number, number] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [addDataOpen, setAddDataOpen] = useState(false);
+
+  const canEdit = role === "owner" || role === "editor";
+
+  const loadMap = useCallback(async () => {
+    if (!id) return;
+    try {
+      const { map, layers, role } = await api.getMap(id);
+      setMap(map);
+      setLayers(layers);
+      setRole(role);
+      setVisibleIds(new Set(layers.map((l) => l.id)));
+      if (!selectedId && layers.length) setSelectedId(layers[0].id);
+      // Fetch features for every vector layer (fine for MVP-scale datasets).
+      // Raster (service) layers render straight from their tile URL — they
+      // have no rows in `features`, so there's nothing to fetch for them.
+      const entries = await Promise.all(
+        layers.filter((l) => l.kind !== "raster").map(async (l) => [l.id, await api.getLayerFeatures(l.id)] as const)
+      );
+      setFeaturesByLayer(Object.fromEntries(entries));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't load this map.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  useEffect(() => {
+    loadMap();
+  }, [loadMap]);
+
+  const selectedLayer = layers.find((l) => l.id === selectedId) || null;
+  const visibleLayers = layers.filter((l) => visibleIds.has(l.id));
+
+  async function handleUpload(file: File) {
+    if (!id) return;
+    setError(null);
+    setNotice(null);
+    try {
+      const { featureCount, skipped, warning } = await api.uploadLayer(id, file);
+      await loadMap();
+      const notes: string[] = [`Loaded ${featureCount} feature${featureCount === 1 ? "" : "s"}.`];
+      if (skipped) notes.push(`${skipped} row${skipped === 1 ? "" : "s"} skipped (unsupported or invalid geometry).`);
+      if (warning) notes.push(warning);
+      setNotice(notes.join(" "));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    }
+  }
+
+  // Called by AddDataPanel per-item; errors are intentionally left to
+  // propagate so the panel can show them inline next to the item that failed
+  // rather than as a page-level banner.
+  async function handleAddService(entry: CatalogEntry) {
+    if (!id) return;
+    setError(null);
+    const { featureCount, skipped } = await api.addServiceLayer(id, {
+      name: entry.name,
+      serviceType: entry.serviceType,
+      fields: entry.fields,
+    });
+    await loadMap();
+    if (entry.serviceType === "wfs" || entry.serviceType === "arcgis" || entry.serviceType === "geojson") {
+      const notes = [`Added "${entry.name}" — imported ${featureCount} feature${featureCount === 1 ? "" : "s"}.`];
+      if (skipped) notes.push(`${skipped} skipped (unsupported or invalid geometry).`);
+      setNotice(notes.join(" "));
+    } else {
+      setNotice(`Added "${entry.name}" as a basemap layer.`);
+    }
+  }
+
+  async function handleStyleChange(style: Partial<LayerDto["style"]>) {
+    if (!selectedLayer) return;
+    const mergedStyle = { ...selectedLayer.style, ...style };
+    const updated = { ...selectedLayer, style: mergedStyle };
+    setLayers((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
+    await api.updateLayer(selectedLayer.id, { style: mergedStyle });
+  }
+
+  async function handlePopupFieldsChange(fields: string[]) {
+    if (!selectedLayer) return;
+    setLayers((prev) => prev.map((l) => (l.id === selectedLayer.id ? { ...l, popup_fields: fields } : l)));
+    await api.updateLayer(selectedLayer.id, { popup_fields: fields });
+  }
+
+  async function handleDeleteLayer(layerId: string) {
+    await api.deleteLayer(layerId);
+    if (selectedId === layerId) setSelectedId(null);
+    await loadMap();
+  }
+
+  async function handleShare(visibility: MapVisibility) {
+    if (!id) return;
+    const { map } = await api.shareMap(id, visibility);
+    setMap(map);
+  }
+
+  const selectedFeatures = selectedLayer ? featuresByLayer[selectedLayer.id] || null : null;
+  const allFields: string[] = Array.from(
+    new Set((selectedFeatures?.features || []).flatMap((f) => Object.keys(f.properties || {})))
+  );
+
+  if (!map) {
+    return <div className="page-loading">{error || "Loading map…"}</div>;
+  }
+
+  return (
+    <div className="editor-page">
+      <header className="app-header">
+        <div className="logo" onClick={() => navigate("/maps")} style={{ cursor: "pointer" }}>
+          GISNEXUS
+        </div>
+        <div className="map-title">{map.name}</div>
+        <div className="header-actions">
+          <UploadButton onUpload={handleUpload} />
+          {canEdit && (
+            <button className="btn" onClick={() => setAddDataOpen(true)}>
+              🌐 Add data
+            </button>
+          )}
+          {role === "owner" && (
+            <button className="btn" onClick={() => setShareOpen(true)}>
+              Share
+            </button>
+          )}
+        </div>
+      </header>
+
+      {error && <div className="banner-error">{error}</div>}
+      {notice && (
+        <div className="banner-notice">
+          {notice}
+          <button onClick={() => setNotice(null)}>✕</button>
+        </div>
+      )}
+
+      <div className="app">
+        <aside className="sidebar">
+          <div className="sidebar-section">
+            <h4>Layers</h4>
+            <LayerList
+              layers={layers}
+              visibleIds={visibleIds}
+              selectedId={selectedId}
+              canEdit={canEdit}
+              onToggleVisible={(lid) =>
+                setVisibleIds((prev) => {
+                  const next = new Set(prev);
+                  next.has(lid) ? next.delete(lid) : next.add(lid);
+                  return next;
+                })
+              }
+              onSelect={setSelectedId}
+              onDelete={handleDeleteLayer}
+            />
+          </div>
+          {selectedLayer && canEdit && selectedLayer.kind === "raster" ? (
+            <div className="sidebar-section">
+              <h4>Layer — {selectedLayer.name}</h4>
+              <div className="field-row">
+                <label>Opacity</label>
+                <input
+                  type="range"
+                  min={0.1}
+                  max={1}
+                  step={0.05}
+                  value={selectedLayer.style.opacity}
+                  onChange={(e) => handleStyleChange({ opacity: parseFloat(e.target.value) })}
+                />
+                <span className="field-val">{Math.round(selectedLayer.style.opacity * 100)}%</span>
+              </div>
+              {selectedLayer.service?.attribution && <p className="muted-sm">{selectedLayer.service.attribution}</p>}
+            </div>
+          ) : (
+            selectedLayer &&
+            canEdit && (
+              <>
+                <StylePanel layer={selectedLayer} onChange={handleStyleChange} />
+                <PopupConfigPanel allFields={allFields} selectedFields={selectedLayer.popup_fields} onChange={handlePopupFieldsChange} />
+              </>
+            )
+          )}
+        </aside>
+
+        <div className="map-wrap">
+          <MapCanvas
+            layers={visibleLayers}
+            featuresByLayer={featuresByLayer}
+            viewState={map.view_state}
+            onViewStateChange={(v) => api.updateMap(map.id, { view_state: v }).catch(() => {})}
+            onFeatureClick={(layer, feature, lngLat) => setPopup({ layer, feature, lngLat })}
+          />
+          {popup && (
+            <div className="map-popup" onClick={() => setPopup(null)}>
+              <div className="popup-card-inline" onClick={(e) => e.stopPropagation()}>
+                <div className="pt">
+                  <span>{popup.layer.name}</span>
+                  <button onClick={() => setPopup(null)}>✕</button>
+                </div>
+                {(popup.layer.popup_fields.length ? popup.layer.popup_fields : Object.keys(popup.feature.properties).slice(0, 4)).map(
+                  (k) => (
+                    <div className="prow" key={k}>
+                      <span>{k}</span>
+                      <b>{String(popup.feature.properties[k] ?? "—")}</b>
+                    </div>
+                  )
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bottom-panel">
+        <div className="bottom-tabs">
+          <button className={tab === "table" ? "active" : ""} onClick={() => setTab("table")}>
+            Data table
+          </button>
+          <button className={tab === "dashboard" ? "active" : ""} onClick={() => setTab("dashboard")}>
+            Dashboard
+          </button>
+          <button className={tab === "analysis" ? "active" : ""} onClick={() => setTab("analysis")}>
+            Spatial analysis
+          </button>
+        </div>
+        <div className="bottom-content">
+          {!selectedLayer ? (
+            <div className="empty-note">Select a layer to get started.</div>
+          ) : selectedLayer.kind === "raster" ? (
+            <div className="empty-note">
+              "{selectedLayer.name}" is a basemap/imagery layer — there's no feature data to show in the table,
+              dashboard, or spatial analysis tools. Use the opacity slider in the sidebar to adjust it.
+            </div>
+          ) : tab === "table" ? (
+            <DataTable data={selectedFeatures} />
+          ) : tab === "dashboard" ? (
+            <DashboardChart layer={selectedLayer} data={selectedFeatures} />
+          ) : canEdit ? (
+            <AnalysisPanel layer={selectedLayer} allLayers={layers.filter((l) => l.kind !== "raster")} onCreated={loadMap} />
+          ) : (
+            <div className="empty-note">You need edit access to run spatial analysis.</div>
+          )}
+        </div>
+      </div>
+
+      {shareOpen && (
+        <div className="modal-backdrop" onClick={() => setShareOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Share "{map.name}"</h3>
+            <p className="muted-sm">Anyone with the link can view this map if visibility is set to Unlisted or Public.</p>
+            <div className="share-options">
+              {(["private", "unlisted", "public"] as MapVisibility[]).map((v) => (
+                <button key={v} className={"btn" + (map.visibility === v ? " btn-primary" : "")} onClick={() => handleShare(v)}>
+                  {v}
+                </button>
+              ))}
+            </div>
+            {map.visibility !== "private" && map.share_token && (
+              <div className="share-link">
+                <code>{`${window.location.origin}/share/${map.share_token}`}</code>
+                <button className="btn btn-sm" onClick={() => navigator.clipboard.writeText(`${window.location.origin}/share/${map.share_token}`)}>
+                  Copy
+                </button>
+              </div>
+            )}
+            <button className="btn" style={{ marginTop: 16 }} onClick={() => setShareOpen(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {addDataOpen && <AddDataPanel onAdd={handleAddService} onClose={() => setAddDataOpen(false)} />}
+    </div>
+  );
+}
