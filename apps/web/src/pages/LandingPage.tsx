@@ -1,6 +1,14 @@
 import { Link, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
+// Copy here is intentionally scoped to what the app actually does today —
+// see the codebase for what backs each claim (upload formats in
+// UploadButton/AddDataPanel, chart in DashboardChart, buffer/intersect in
+// AnalysisPanel, roles + share tokens in MapEditorPage). Resist the urge to
+// add "AI assistant" / "mobile app" / "real-time multiplayer" language here
+// unless those features actually ship — this page is the first thing new
+// users read.
+
 const FEATURES = [
   {
     title: "Upload anything",
@@ -45,6 +53,20 @@ const STATS = [
   { n: "0 installs", l: "Runs entirely in your browser" },
 ];
 
+// Mirrors apps/web/src/lib/serviceCatalog.ts — the built-in "Add Data"
+// catalog and the OSM basemap in MapCanvas.tsx. Keep this list in sync if
+// entries are added/removed there; each of these is a live source the app
+// can actually pull tiles/data from, not just a general thank-you list.
+const DATA_CREDITS = [
+  { name: "OpenStreetMap", href: "https://www.openstreetmap.org/copyright" },
+  { name: "OpenTopoMap", href: "https://opentopomap.org" },
+  { name: "NASA GIBS / MODIS", href: "https://www.earthdata.nasa.gov/data/tools/gibs" },
+  { name: "GEBCO", href: "https://www.gebco.net" },
+  { name: "Sentinel-2 cloudless (EOX)", href: "https://s2maps.eu" },
+  { name: "Natural Earth", href: "https://www.naturalearthdata.com" },
+  { name: "Esri", href: "https://www.esri.com" },
+];
+
 function Logo({ small }: { small?: boolean }) {
   const s = small ? 24 : 30;
   return (
@@ -64,6 +86,7 @@ function Logo({ small }: { small?: boolean }) {
 export default function LandingPage() {
   const { user, loading } = useAuth();
 
+  // Skip the marketing page for anyone already signed in.
   if (!loading && user) return <Navigate to="/maps" replace />;
 
   return (
@@ -262,7 +285,21 @@ export default function LandingPage() {
             <a href="#personas">Who it's for</a>
             <a href="#workflow">How it works</a>
           </div>
-          <div className="landing-foot-note">© {new Date().getFullYear()} GISNEXUS</div>
+          <div className="landing-foot-note">
+            © {new Date().getFullYear()} GISNEXUS · Built by{" "}
+            <a href="mailto:rudoq.007@gmail.com">@trekky675</a>
+          </div>
+        </div>
+        <div className="landing-wrap landing-credits">
+          Basemaps &amp; imagery courtesy of{" "}
+          {DATA_CREDITS.map((c, i) => (
+            <span key={c.name}>
+              <a href={c.href} target="_blank" rel="noreferrer">
+                {c.name}
+              </a>
+              {i < DATA_CREDITS.length - 1 ? (i === DATA_CREDITS.length - 2 ? ", and " : ", ") : "."}
+            </span>
+          ))}
         </div>
       </footer>
     </div>
