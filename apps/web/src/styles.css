@@ -52,6 +52,29 @@ input, select { font-family: inherit; }
 .auth-switch { text-align: center; margin-top: 18px; font-size: 13px; color: var(--ink-soft); }
 .auth-switch a { color: var(--brand); font-weight: 700; text-decoration: none; }
 
+/* Landing page */
+.landing-page { min-height: 100vh; background: var(--bg); }
+.landing-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 32px; border-bottom: 1px solid var(--line); background: var(--white);
+}
+.landing-header .logo { font-weight: 800; font-size: 17px; color: var(--ink); }
+.landing-header .header-actions { display: flex; gap: 10px; }
+.landing-hero { max-width: 720px; margin: 0 auto; padding: 100px 24px 70px; text-align: center; }
+.landing-hero h1 { font-size: 40px; line-height: 1.15; margin: 0 0 18px; color: var(--ink); }
+.landing-hero p { font-size: 17px; color: var(--ink-soft); margin: 0 0 32px; line-height: 1.5; }
+.landing-hero-actions { display: flex; gap: 12px; justify-content: center; }
+.btn-lg { padding: 12px 22px; font-size: 14.5px; border-radius: 10px; }
+.landing-features {
+  max-width: 1000px; margin: 0 auto; padding: 0 24px 100px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px;
+}
+.landing-feature-card {
+  background: var(--white); border: 1px solid var(--line); border-radius: 14px; padding: 26px;
+}
+.landing-feature-card h3 { margin: 0 0 10px; font-size: 16px; color: var(--brand-dark); }
+.landing-feature-card p { margin: 0; font-size: 13.5px; color: var(--ink-soft); line-height: 1.6; }
+
 /* Maps list */
 .maps-list-body { max-width: 1000px; margin: 0 auto; padding: 32px 24px; }
 .maps-list-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
