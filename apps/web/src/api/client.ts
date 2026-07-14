@@ -163,10 +163,30 @@ export const api = {
     }),
 
   // Terrain (GeoLibre-style "Processing" tools, backed by WhiteboxTools — see
-  // apps/api/src/lib/terrain.ts. Hillshade ships first; more (slope, aspect,
-  // contours, watershed) follow the same pattern.)
+  // apps/api/src/lib/terrain.ts). All five run against the current map
+  // viewport (bbox) rather than a selected layer — see TerrainPanel.tsx.
   runHillshade: (mapId: string, params: { bbox: Bbox; azimuth?: number; altitude?: number; name?: string }) =>
     request<{ layer: LayerDto }>(`/api/maps/${mapId}/terrain/hillshade`, {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+  runSlope: (mapId: string, params: { bbox: Bbox; units?: "degrees" | "percent"; name?: string }) =>
+    request<{ layer: LayerDto }>(`/api/maps/${mapId}/terrain/slope`, {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+  runAspect: (mapId: string, params: { bbox: Bbox; name?: string }) =>
+    request<{ layer: LayerDto }>(`/api/maps/${mapId}/terrain/aspect`, {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+  runContours: (mapId: string, params: { bbox: Bbox; intervalMeters?: number; name?: string }) =>
+    request<{ layer: LayerDto; featureCount: number }>(`/api/maps/${mapId}/terrain/contours`, {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+  runWatershed: (mapId: string, params: { bbox: Bbox; pourPoint: { lon: number; lat: number }; name?: string }) =>
+    request<{ layer: LayerDto; featureCount: number }>(`/api/maps/${mapId}/terrain/watershed`, {
       method: "POST",
       body: JSON.stringify(params),
     }),

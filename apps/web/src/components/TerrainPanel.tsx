@@ -5,6 +5,13 @@ interface Props {
   mapId: string;
   bounds: Bbox | null;
   onCreated: () => void;
+  // Watershed pour-point picking is driven from here but the actual map
+  // click subscription lives in MapEditorPage/MapCanvas — this panel just
+  // reads the current pick and asks the parent to start/stop picking mode.
+  pourPoint: { lon: number; lat: number } | null;
+  pickingPourPoint: boolean;
+  onStartPickPourPoint: () => void;
+  onClearPourPoint: () => void;
 }
 
 // Terrain analysis (GeoLibre-style "Processing" tools), backed by
@@ -13,24 +20,44 @@ interface Props {
 // layer), these tools run against "whatever DEM covers the current map
 // view" — there's no selected layer involved, so this panel takes the
 // live viewport bounds reported by MapCanvas instead of a layer prop.
-export default function TerrainPanel({ mapId, bounds, onCreated }: Props) {
+export default function TerrainPanel({
+  mapId,
+  bounds,
+  onCreated,
+  pourPoint,
+  pickingPourPoint,
+  onStartPickPourPoint,
+  onClearPourPoint,
+}: Props) {
   const [azimuth, setAzimuth] = useState(315);
   const [altitude, setAltitude] = useState(45);
-  const [busy, setBusy] = useState(false);
+  const [slopeUnits, setSlopeUnits] = useState<"degrees" | "percent">("degrees");
+  const [contourInterval, setContourInterval] = useState(50);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function runHillshade() {
-    if (!bounds) return;
-    setBusy(true);
+  async function run(tool: string, fn: () => Promise<unknown>) {
+    setBusy(tool);
     setError(null);
     try {
-      await api.runHillshade(mapId, { bbox: bounds, azimuth, altitude });
+      await fn();
       onCreated();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Hillshade failed.");
+      setError(err instanceof Error ? err.message : `${tool} failed.`);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
+  }
+
+  const runHillshade = () => bounds && run("hillshade", () => api.runHillshade(mapId, { bbox: bounds, azimuth, altitude }));
+  const runSlope = () => bounds && run("slope", () => api.runSlope(mapId, { bbox: bounds, units: slopeUnits }));
+  const runAspect = () => bounds && run("aspect", () => api.runAspect(mapId, { bbox: bounds }));
+  const runContours = () => bounds && run("contours", () => api.runContours(mapId, { bbox: bounds, intervalMeters: contourInterval }));
+  const runWatershed = () =>
+    bounds && pourPoint && run("watershed", () => api.runWatershed(mapId, { bbox: bounds, pourPoint }));
+
+  if (!bounds) {
+    return <div className="empty-note">Waiting for the map to finish loading…</div>;
   }
 
   return (
@@ -38,7 +65,7 @@ export default function TerrainPanel({ mapId, bounds, onCreated }: Props) {
       <p>
         Run terrain analysis on <b>the current map view</b>. Elevation data is fetched automatically for whatever's
         visible on screen — pan/zoom the map to the area you want first, then run a tool below. Results are added as
-        a new raster layer on this map.
+        a new layer on this map.
       </p>
 
       <h4>Hillshade</h4>
@@ -69,24 +96,75 @@ export default function TerrainPanel({ mapId, bounds, onCreated }: Props) {
         />
         <span className="muted-sm">° (sun elevation)</span>
       </div>
+      <button className="btn btn-primary" disabled={!!busy} onClick={runHillshade}>
+        {busy === "hillshade" ? "Generating hillshade…" : "Run hillshade"}
+      </button>
 
-      {!bounds ? (
-        <div className="empty-note">Waiting for the map to finish loading…</div>
-      ) : (
-        <button className="btn btn-primary" disabled={busy} onClick={runHillshade}>
-          {busy ? "Generating hillshade…" : "Run hillshade"}
+      <h4 style={{ marginTop: 22 }}>Slope</h4>
+      <p className="muted-sm">Steepness at every point, colorized from flat (green) to steep (red).</p>
+      <div className="analysis-row">
+        <select value={slopeUnits} onChange={(e) => setSlopeUnits(e.target.value as "degrees" | "percent")}>
+          <option value="degrees">Degrees</option>
+          <option value="percent">Percent</option>
+        </select>
+      </div>
+      <button className="btn btn-primary" disabled={!!busy} onClick={runSlope}>
+        {busy === "slope" ? "Generating slope…" : "Run slope"}
+      </button>
+
+      <h4 style={{ marginTop: 22 }}>Aspect</h4>
+      <p className="muted-sm">
+        Compass direction each slope faces, colorized as a hue wheel (north/south/east/west each get a distinct color).
+      </p>
+      <button className="btn btn-primary" disabled={!!busy} onClick={runAspect}>
+        {busy === "aspect" ? "Generating aspect…" : "Run aspect"}
+      </button>
+
+      <h4 style={{ marginTop: 22 }}>Contours</h4>
+      <p className="muted-sm">Elevation isolines at a fixed interval, added as a new line layer.</p>
+      <div className="analysis-row">
+        <input
+          type="number"
+          min={1}
+          step={5}
+          value={contourInterval}
+          onChange={(e) => setContourInterval(parseFloat(e.target.value) || 0)}
+        />
+        <span className="muted-sm">meters interval</span>
+      </div>
+      <button className="btn btn-primary" disabled={!!busy} onClick={runContours}>
+        {busy === "contours" ? "Generating contours…" : "Run contours"}
+      </button>
+
+      <h4 style={{ marginTop: 22 }}>Watershed</h4>
+      <p className="muted-sm">
+        Delineates the upstream catchment area that drains to a point you pick — click "Pick pour point," then click
+        anywhere on the map.
+      </p>
+      <div className="analysis-row">
+        <button className={"btn" + (pickingPourPoint ? " btn-primary" : "")} onClick={onStartPickPourPoint} disabled={!!busy}>
+          {pickingPourPoint ? "Click the map…" : pourPoint ? "Pick a different point" : "Pick pour point"}
         </button>
+        {pourPoint && (
+          <button className="btn btn-sm" onClick={onClearPourPoint} disabled={!!busy}>
+            Clear
+          </button>
+        )}
+      </div>
+      {pourPoint && (
+        <p className="muted-sm">
+          Pour point: {pourPoint.lat.toFixed(5)}, {pourPoint.lon.toFixed(5)}
+        </p>
       )}
+      <button className="btn btn-primary" disabled={!!busy || !pourPoint} onClick={runWatershed}>
+        {busy === "watershed" ? "Delineating watershed…" : "Run watershed"}
+      </button>
 
       {error && (
         <div className="auth-error" style={{ marginTop: 12 }}>
           {error}
         </div>
       )}
-
-      <p className="muted-sm" style={{ marginTop: 22 }}>
-        More terrain tools (slope, aspect, contours, watershed delineation) are coming soon.
-      </p>
     </div>
   );
 }

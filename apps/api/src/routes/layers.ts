@@ -28,8 +28,15 @@ const upload = multer({
   limits: { fileSize: env.maxUploadMb * 1024 * 1024 },
 });
 
-/** Inserts a batch of normalized features for a layer inside a transaction. */
-async function insertFeatures(layerId: string, features: NormalizedFeature[]) {
+/**
+ * Inserts a batch of normalized features for a layer inside a transaction.
+ * Exported for reuse by routes/terrain.ts — the vector-output terrain tools
+ * (Contours, Watershed) produce the exact same NormalizedFeature[] shape as
+ * an upload does, just sourced from a WhiteboxTools Shapefile instead of a
+ * user-supplied file, so they insert the same way rather than duplicating
+ * this transaction logic.
+ */
+export async function insertFeatures(layerId: string, features: NormalizedFeature[]) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -49,7 +56,7 @@ async function insertFeatures(layerId: string, features: NormalizedFeature[]) {
   }
 }
 
-function collectPopupFields(features: NormalizedFeature[]): string[] {
+export function collectPopupFields(features: NormalizedFeature[]): string[] {
   const keys = new Set<string>();
   for (const f of features) Object.keys(f.properties || {}).forEach((k) => keys.add(k));
   return Array.from(keys).slice(0, 4);

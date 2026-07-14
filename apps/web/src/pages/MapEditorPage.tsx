@@ -28,6 +28,8 @@ export default function MapEditorPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<BottomTab>("table");
   const [bounds, setBounds] = useState<Bbox | null>(null);
+  const [pourPoint, setPourPoint] = useState<{ lon: number; lat: number } | null>(null);
+  const [pickingPourPoint, setPickingPourPoint] = useState(false);
   const [popup, setPopup] = useState<{ layer: LayerDto; feature: GeoFeature; lngLat: [number, number] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -129,6 +131,12 @@ export default function MapEditorPage() {
     setMap(map);
   }
 
+  function handleMapClick(lngLat: [number, number]) {
+    if (!pickingPourPoint) return;
+    setPourPoint({ lon: lngLat[0], lat: lngLat[1] });
+    setPickingPourPoint(false);
+  }
+
   const selectedFeatures = selectedLayer ? featuresByLayer[selectedLayer.id] || null : null;
   const allFields: string[] = Array.from(
     new Set((selectedFeatures?.features || []).flatMap((f) => Object.keys(f.properties || {})))
@@ -165,6 +173,12 @@ export default function MapEditorPage() {
         <div className="banner-notice">
           {notice}
           <button onClick={() => setNotice(null)}>✕</button>
+        </div>
+      )}
+      {pickingPourPoint && (
+        <div className="banner-notice">
+          Click anywhere on the map to set the watershed pour point.
+          <button onClick={() => setPickingPourPoint(false)}>✕</button>
         </div>
       )}
 
@@ -224,6 +238,8 @@ export default function MapEditorPage() {
             onViewStateChange={(v) => api.updateMap(map.id, { view_state: v }).catch(() => {})}
             onFeatureClick={(layer, feature, lngLat) => setPopup({ layer, feature, lngLat })}
             onBoundsChange={setBounds}
+            onMapClick={handleMapClick}
+            pickMarker={pourPoint ? [pourPoint.lon, pourPoint.lat] : null}
           />
           {popup && (
             <div className="map-popup" onClick={() => setPopup(null)}>
@@ -264,7 +280,18 @@ export default function MapEditorPage() {
         <div className="bottom-content">
           {tab === "terrain" ? (
             canEdit ? (
-              <TerrainPanel mapId={id!} bounds={bounds} onCreated={loadMap} />
+              <TerrainPanel
+                mapId={id!}
+                bounds={bounds}
+                onCreated={loadMap}
+                pourPoint={pourPoint}
+                pickingPourPoint={pickingPourPoint}
+                onStartPickPourPoint={() => setPickingPourPoint(true)}
+                onClearPourPoint={() => {
+                  setPourPoint(null);
+                  setPickingPourPoint(false);
+                }}
+              />
             ) : (
               <div className="empty-note">You need edit access to run terrain analysis.</div>
             )

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import maplibregl, { LngLatBoundsLike, Map as MapLibreMap, MapLayerMouseEvent } from "maplibre-gl";
+import maplibregl, { LngLatBoundsLike, Map as MapLibreMap, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import { GeoFeature, GeoFeatureCollection, LayerDto } from "../api/client";
 
 // A free, no-API-key raster basemap. Swap for a vector style + MapTiler/Stadia
@@ -27,6 +27,14 @@ interface Props {
   // (Hillshade, ...) run against "whatever's on screen right now" rather
   // than a layer, so they need this and there's nowhere else to get it.
   onBoundsChange?: (bounds: { west: number; south: number; east: number; north: number }) => void;
+  // Fires on every map click, regardless of whether it landed on a feature —
+  // used by the Watershed tool's "pick a pour point" flow (see
+  // TerrainPanel.tsx / MapEditorPage.tsx). Most of the time this is a no-op
+  // in the parent; only meaningful while pour-point picking is active.
+  onMapClick?: (lngLat: [number, number]) => void;
+  // When set, shows a marker at this position — currently just the chosen
+  // watershed pour point, so the user can see where they clicked.
+  pickMarker?: [number, number] | null;
 }
 
 function sourceIdFor(layerId: string) {
@@ -42,10 +50,29 @@ function rasterLayerIdFor(layerId: string) {
   return `lyr-${layerId}-raster`;
 }
 
-export default function MapCanvas({ layers, featuresByLayer, viewState, onViewStateChange, onFeatureClick, onBoundsChange }: Props) {
+export default function MapCanvas({
+  layers,
+  featuresByLayer,
+  viewState,
+  onViewStateChange,
+  onFeatureClick,
+  onBoundsChange,
+  onMapClick,
+  pickMarker,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const loadedRef = useRef(false);
+  const markerRef = useRef<maplibregl.Marker | null>(null);
+
+  // The map-init effect below only runs once (empty deps), so it captures
+  // whatever onMapClick was passed at mount time. Unlike onBoundsChange/
+  // onFeatureClick (which just call stable setState functions), the pour-
+  // point picker's onMapClick needs to see fresh "am I in picking mode right
+  // now" state on every click — so it's read through a ref that's kept
+  // current every render, rather than closed over directly.
+  const onMapClickRef = useRef(onMapClick);
+  onMapClickRef.current = onMapClick;
 
   function reportBounds(map: MapLibreMap) {
     if (!onBoundsChange) return;
@@ -73,6 +100,9 @@ export default function MapCanvas({ layers, featuresByLayer, viewState, onViewSt
       onViewStateChange({ center: [c.lng, c.lat], zoom: map.getZoom() });
       reportBounds(map);
     });
+    map.on("click", (e: MapMouseEvent) => {
+      onMapClickRef.current?.([e.lngLat.lng, e.lngLat.lat]);
+    });
     mapRef.current = map;
     return () => {
       map.remove();
@@ -81,6 +111,22 @@ export default function MapCanvas({ layers, featuresByLayer, viewState, onViewSt
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Show/move/hide the pour-point marker as it's picked, changed, or cleared.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (pickMarker) {
+      if (!markerRef.current) {
+        markerRef.current = new maplibregl.Marker({ color: "#22d3ee" }).setLngLat(pickMarker).addTo(map);
+      } else {
+        markerRef.current.setLngLat(pickMarker);
+      }
+    } else if (markerRef.current) {
+      markerRef.current.remove();
+      markerRef.current = null;
+    }
+  }, [pickMarker]);
 
   function syncLayers() {
     const map = mapRef.current;
