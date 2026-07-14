@@ -1,3 +1,17 @@
+#!/usr/bin/env bash
+# Fixes the missing legend color swatch for vector layers in the printed
+# map — it was drawn as a plain CSS background-color on an empty <span>,
+# which was printing blank even though other CSS backgrounds on the same
+# page (the legend box itself) rendered fine. Switched to an inline SVG
+# shape with a `fill`, the same mechanism the north arrow already uses
+# successfully in this print sheet.
+#
+# Run this from the root of your gisnexus-app checkout:
+#   bash deliver-legend-swatch-fix.sh
+set -euo pipefail
+
+echo "Writing apps/web/src/components/PrintMapModal.tsx ..."
+cat > apps/web/src/components/PrintMapModal.tsx <<'EOF'
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import MapCanvas from "./MapCanvas";
@@ -267,3 +281,14 @@ export default function PrintMapModal({ map, layers, featuresByLayer, shareUrl, 
     </div>
   );
 }
+EOF
+
+echo ""
+echo "Done writing file. Now review, build, and push:"
+echo ""
+echo "  git status"
+echo "  git diff --stat"
+echo "  npm run build --workspace=apps/web"
+echo "  git add -A"
+echo "  git commit -m \"Fix missing legend color swatch in printed map\""
+echo "  git push"
