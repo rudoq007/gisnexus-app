@@ -1,3 +1,17 @@
+#!/usr/bin/env bash
+# Follow-up fix for deliver-print-map-fix.sh: the build failed with
+#   src/components/MapCanvas.tsx:119:7 - error TS2322: Type 'boolean' is not
+#   assignable to type 'false | AttributionControlOptions | undefined'.
+# MapLibre's `attributionControl` option is NOT a plain boolean — it only
+# accepts `false` (to omit the control) or an options object, not `true`.
+# This replaces just the one line that got that wrong.
+#
+# Run this from the root of your gisnexus-app checkout:
+#   bash deliver-print-map-fix2.sh
+set -euo pipefail
+
+echo "Writing apps/web/src/components/MapCanvas.tsx ..."
+cat > apps/web/src/components/MapCanvas.tsx <<'EOF'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import maplibregl, { LngLatBoundsLike, Map as MapLibreMap, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import { Bbox, GeoFeature, GeoFeatureCollection, LayerDto } from "../api/client";
@@ -364,3 +378,14 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
 });
 
 export default MapCanvas;
+EOF
+
+echo ""
+echo "Done writing file. Now review, build, and push:"
+echo ""
+echo "  git status"
+echo "  git diff --stat"
+echo "  npm run build --workspace=apps/web"
+echo "  git add -A"
+echo "  git commit -m \"Fix TS type error in MapCanvas attributionControl option\""
+echo "  git push"
