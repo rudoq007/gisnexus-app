@@ -44,6 +44,12 @@ function pickScale(lat: number, zoom: number) {
 // linking back to the live, interactive version.
 export default function PrintMapModal({ map, layers, featuresByLayer, shareUrl, onClose }: Props) {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  // Defaults to the map/project's own name, but printed output is often
+  // meant for someone who doesn't care what the project is called internally
+  // (a funder, a field team) — so it's editable here without renaming the
+  // project itself. Blank falls back to the project name at render time
+  // rather than printing an empty header.
+  const [printTitle, setPrintTitle] = useState(map.name);
   const printedAt = useMemo(() => new Date(), []);
   const scale = useMemo(() => pickScale(map.view_state.center[1], map.view_state.zoom), [map.view_state]);
 
@@ -75,6 +81,15 @@ export default function PrintMapModal({ map, layers, featuresByLayer, shareUrl, 
       <div className="print-toolbar">
         <div className="print-toolbar-title">Print preview — adjust the map below, then print</div>
         <div className="print-toolbar-actions">
+          <label className="print-title-field">
+            Map title
+            <input
+              type="text"
+              value={printTitle}
+              onChange={(e) => setPrintTitle(e.target.value)}
+              placeholder={map.name}
+            />
+          </label>
           <button className="btn btn-primary" onClick={() => window.print()}>
             🖨️ Print / Save as PDF
           </button>
@@ -86,7 +101,7 @@ export default function PrintMapModal({ map, layers, featuresByLayer, shareUrl, 
 
       <div className="print-sheet">
         <div className="print-sheet-header">
-          <h1>{map.name}</h1>
+          <h1>{printTitle.trim() || map.name}</h1>
           {map.description && <p>{map.description}</p>}
         </div>
 
@@ -97,6 +112,7 @@ export default function PrintMapModal({ map, layers, featuresByLayer, shareUrl, 
             viewState={map.view_state}
             onViewStateChange={() => {}}
             onFeatureClick={() => {}}
+            printMode
           />
 
           <div className="print-north-arrow" title="North is up">

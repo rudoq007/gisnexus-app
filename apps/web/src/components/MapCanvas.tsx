@@ -35,6 +35,13 @@ interface Props {
   // When set, shows a marker at this position — currently just the chosen
   // watershed pour point, so the user can see where they clicked.
   pickMarker?: [number, number] | null;
+  // Set by PrintMapModal for the map instance embedded in the print sheet.
+  // Interactive zoom/compass buttons and the default attribution bubble have
+  // no purpose on a printed page (nothing to click, and the print sheet
+  // already carries its own credits line) — and in testing, browsers'
+  // print-to-PDF rasterizer intermittently drops these controls' background-
+  // image icons, leaving blank boxes. Omitting them avoids both problems.
+  printMode?: boolean;
 }
 
 // Imperative actions the parent (MapEditorPage) can trigger directly, for
@@ -60,7 +67,7 @@ function rasterLayerIdFor(layerId: string) {
 }
 
 const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
-  { layers, featuresByLayer, viewState, onViewStateChange, onFeatureClick, onBoundsChange, onMapClick, pickMarker },
+  { layers, featuresByLayer, viewState, onViewStateChange, onFeatureClick, onBoundsChange, onMapClick, pickMarker, printMode },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -105,8 +112,15 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
       style: BASEMAP_STYLE,
       center: viewState.center,
       zoom: viewState.zoom,
+      // See the `printMode` comment on Props above — the print sheet builds
+      // its own attribution/credits line from each layer's
+      // service.attribution (PrintMapModal.tsx), so MapLibre's own
+      // AttributionControl would just be a redundant, print-unreliable icon.
+      attributionControl: !printMode,
     });
-    map.addControl(new maplibregl.NavigationControl(), "bottom-left");
+    if (!printMode) {
+      map.addControl(new maplibregl.NavigationControl(), "bottom-left");
+    }
     map.on("load", () => {
       loadedRef.current = true;
       syncLayers();
@@ -121,7 +135,26 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
       onMapClickRef.current?.([e.lngLat.lng, e.lngLat.lat]);
     });
     mapRef.current = map;
+
+    // MapLibre resizes its canvas via a ResizeObserver on the container, and
+    // that callback fires asynchronously. The browser's print pipeline
+    // applies @media print layout (the print sheet snapping from its capped
+    // on-screen width to the full page width) and can rasterize the page
+    // without waiting a full event-loop turn for that async callback — so
+    // the canvas stays sized for the on-screen layout, leaving the newly-
+    // widened container's extra width blank in the PDF. `beforeprint` fires
+    // after the browser has already applied print styles, so forcing a
+    // synchronous resize() here reads the correct, already-reflowed
+    // dimensions before the page is captured. `afterprint` puts it back once
+    // the dialog closes and the sheet returns to its on-screen size.
+    const handleBeforePrint = () => map.resize();
+    const handleAfterPrint = () => map.resize();
+    window.addEventListener("beforeprint", handleBeforePrint);
+    window.addEventListener("afterprint", handleAfterPrint);
+
     return () => {
+      window.removeEventListener("beforeprint", handleBeforePrint);
+      window.removeEventListener("afterprint", handleAfterPrint);
       map.remove();
       mapRef.current = null;
       loadedRef.current = false;
