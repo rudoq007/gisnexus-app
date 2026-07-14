@@ -1,3 +1,60 @@
+#!/usr/bin/env bash
+# GISNEXUS — Fix raster layer download: the GeoTIFF re-encode (via the
+# `geotiff` npm package) threw "you passed into encodeImage a width of type
+# undefined" — the library rejected the metadata shape we guessed at (no
+# network access to check its real API against docs). Rather than guess
+# again, this drops that dependency entirely and ships the original PNG
+# bytes unchanged, plus a standard ESRI world file (.pgw) and .prj
+# projection file — both are plain, unchanging static text formats, so
+# there's no third-party API left to get wrong.
+#
+# Deletes apps/web/src/types/geotiff.d.ts (no longer needed) and rewrites
+# apps/web/src/lib/downloadLayer.ts and apps/web/package.json (removes the
+# geotiff dependency).
+#
+# Run this from the ROOT of your gisnexus-app repo, in Git Bash:
+#   bash deliver-download-fix.sh
+set -e
+
+echo "Removing apps/web/src/types/geotiff.d.ts (no longer needed) ..."
+rm -f apps/web/src/types/geotiff.d.ts
+rmdir apps/web/src/types 2>/dev/null || true
+
+echo "Writing apps/web/package.json ..."
+cat > apps/web/package.json <<'EOF'
+{
+  "name": "@gisnexus/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name=gisnexus-app"
+  },
+  "dependencies": {
+    "maplibre-gl": "^4.5.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.25.1"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.5.3",
+    "vite": "^6.0.0",
+    "wrangler": "^4.0.0"
+  }
+}
+EOF
+
+echo "Writing apps/web/src/lib/downloadLayer.ts ..."
+cat > apps/web/src/lib/downloadLayer.ts <<'EOF'
 import { GeoFeatureCollection, LayerDto } from "../api/client";
 
 // Triggers a browser download of an in-memory Blob — shared by the vector
@@ -110,3 +167,14 @@ export async function downloadRasterLayer(layer: LayerDto) {
   downloadBlob(`${base}.pgw`, new Blob([worldFile], { type: "text/plain" }));
   downloadBlob(`${base}.prj`, new Blob([WGS84_PRJ], { type: "text/plain" }));
 }
+EOF
+
+echo ""
+echo "Done writing files. Now review, build, and push:"
+echo ""
+echo "  git status"
+echo "  git diff --stat"
+echo "  npm run build --workspace=apps/web"
+echo "  git add -A"
+echo "  git commit -m \"Fix raster layer download: PNG + world file instead of GeoTIFF re-encode\""
+echo "  git push"
