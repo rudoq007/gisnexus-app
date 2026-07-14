@@ -13,6 +13,7 @@ import TerrainPanel from "../components/TerrainPanel";
 import AddDataPanel from "../components/AddDataPanel";
 import PrintMapModal from "../components/PrintMapModal";
 import { CatalogEntry } from "../lib/serviceCatalog";
+import { downloadRasterLayer, downloadVectorLayer } from "../lib/downloadLayer";
 
 type BottomTab = "table" | "dashboard" | "analysis" | "terrain";
 
@@ -125,6 +126,30 @@ export default function MapEditorPage() {
     await loadMap();
   }
 
+  // Vector layers already have their full feature set in featuresByLayer
+  // (fetched up front by loadMap), so that path is synchronous and can't
+  // fail beyond "not loaded yet". Raster (image) layers re-encode the PNG
+  // as a GeoTIFF in the browser (see lib/downloadLayer.ts) — that's the
+  // least-proven part of this feature, so its errors are surfaced via the
+  // same error banner as everything else rather than silently swallowed.
+  function handleDownloadLayer(layerId: string) {
+    const layer = layers.find((l) => l.id === layerId);
+    if (!layer) return;
+    setError(null);
+    if (layer.kind === "raster") {
+      downloadRasterLayer(layer).catch((err) =>
+        setError(err instanceof Error ? err.message : "Couldn't download this layer.")
+      );
+    } else {
+      const fc = featuresByLayer[layerId];
+      if (!fc) {
+        setError("This layer's features haven't finished loading yet — try again in a moment.");
+        return;
+      }
+      downloadVectorLayer(layer, fc);
+    }
+  }
+
   async function handleShare(visibility: MapVisibility) {
     if (!id) return;
     const { map } = await api.shareMap(id, visibility);
@@ -200,6 +225,7 @@ export default function MapEditorPage() {
               }
               onSelect={setSelectedId}
               onDelete={handleDeleteLayer}
+              onDownload={handleDownloadLayer}
             />
           </div>
           {selectedLayer && canEdit && selectedLayer.kind === "raster" ? (
