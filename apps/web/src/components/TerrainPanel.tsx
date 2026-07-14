@@ -14,6 +14,15 @@ interface Props {
   onClearPourPoint: () => void;
 }
 
+// Human label shown in the sticky status banner while each tool runs.
+const BUSY_LABELS: Record<string, string> = {
+  hillshade: "Generating hillshade",
+  slope: "Generating slope",
+  aspect: "Generating aspect",
+  contours: "Generating contours",
+  watershed: "Delineating watershed",
+};
+
 // Terrain analysis (GeoLibre-style "Processing" tools), backed by
 // WhiteboxTools server-side — see apps/api/src/lib/terrain.ts. Unlike
 // AnalysisPanel (buffer/intersect, which run against a selected vector
@@ -35,17 +44,37 @@ export default function TerrainPanel({
   const [contourInterval, setContourInterval] = useState(50);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // WhiteboxTools runs as a single request/response on the server — there's
+  // no real incremental progress being streamed back, so this is a
+  // time-based *estimate* meant to reassure the user something's actually
+  // happening, not a literal measurement. It climbs quickly at first, eases
+  // off approaching 95% while the request is still in flight (so it never
+  // falsely claims to be done), then jumps to 100% the moment the response
+  // actually arrives.
+  const [progress, setProgress] = useState(0);
 
   async function run(tool: string, fn: () => Promise<unknown>) {
     setBusy(tool);
     setError(null);
+    setProgress(5);
+    const interval = window.setInterval(() => {
+      setProgress((p) => (p >= 95 ? p : p + (95 - p) * 0.08 + 0.3));
+    }, 250);
     try {
       await fn();
+      window.clearInterval(interval);
+      setProgress(100);
+      // Brief pause so the bar visibly reaches 100% instead of jumping
+      // straight from ~95% to disappearing.
+      await new Promise((resolve) => setTimeout(resolve, 350));
       onCreated();
     } catch (err) {
+      window.clearInterval(interval);
       setError(err instanceof Error ? err.message : `${tool} failed.`);
     } finally {
+      window.clearInterval(interval);
       setBusy(null);
+      setProgress(0);
     }
   }
 
@@ -62,6 +91,28 @@ export default function TerrainPanel({
 
   return (
     <div className="analysis-box">
+      {/* Sticky to the top of this scrollable panel (not just placed first
+          in the DOM) so it stays visible no matter which tool section below
+          you're scrolled to when you click "Run" — previously this only
+          appeared after Watershed, at the very bottom, so running Hillshade
+          (the first tool) meant scrolling all the way down to see whether
+          anything had happened. */}
+      {(busy || error) && (
+        <div className={"terrain-status" + (error ? " error" : " busy")}>
+          {error ? (
+            error
+          ) : (
+            <>
+              <div>{(busy && BUSY_LABELS[busy]) || "Running"}… this can take up to a minute for a larger area.</div>
+              <div className="terrain-progress-track">
+                <div className="terrain-progress-fill" style={{ width: `${Math.round(progress)}%` }} />
+              </div>
+              <div className="terrain-progress-pct">{Math.round(progress)}%</div>
+            </>
+          )}
+        </div>
+      )}
+
       <p>
         Run terrain analysis on <b>the current map view</b>. Elevation data is fetched automatically for whatever's
         visible on screen — pan/zoom the map to the area you want first, then run a tool below. Results are added as
@@ -159,12 +210,6 @@ export default function TerrainPanel({
       <button className="btn btn-primary" disabled={!!busy || !pourPoint} onClick={runWatershed}>
         {busy === "watershed" ? "Delineating watershed…" : "Run watershed"}
       </button>
-
-      {error && (
-        <div className="auth-error" style={{ marginTop: 12 }}>
-          {error}
-        </div>
-      )}
     </div>
   );
 }
