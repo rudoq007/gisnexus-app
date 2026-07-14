@@ -116,8 +116,17 @@ RAM, but Fly no longer offers a real free tier for new accounts as of the
 1. Push this repo to GitHub.
 2. In Render, **New → Web Service**, connect the repo, set the root directory
    to `apps/api`.
-3. Build command: `npm install && npm run build`. Start command:
-   `npm run migrate && npm start`.
+3. Build command: `npm install && npm run setup:whitebox && npm run build`.
+   Start command: `npm run migrate && npm start`. (`setup:whitebox` downloads
+   the open-source WhiteboxTools binary the terrain-analysis endpoints shell
+   out to — see `apps/api/scripts/setup-whitebox.js`. It's non-fatal if it
+   fails, so leaving it out of the build command just means terrain
+   endpoints return a clear 503 instead of working; everything else is
+   unaffected. **If your service is actually deploying via
+   `apps/api/Dockerfile`** instead of this native build command — Render
+   auto-detects a Dockerfile if present — this step is already baked into
+   the image and you don't need to touch the dashboard's Build command at
+   all.)
 4. Set environment variables: `DATABASE_URL` (from Supabase),
    `JWT_SECRET` (generate with `openssl rand -hex 32`), `CORS_ORIGIN` (your
    frontend's URL, added after step 3), `PORT=4000` (Render sets `PORT`
@@ -136,6 +145,33 @@ RAM, but Fly no longer offers a real free tier for new accounts as of the
    to attach).
 5. Go back to Render and set `CORS_ORIGIN` to this Cloudflare Pages URL, then
    redeploy the API so the browser is allowed to call it.
+
+### Alternative: deploying the frontend from the CLI
+
+If you'd rather push a build manually instead of connecting Git, run this
+from `apps/web`:
+
+```bash
+npm run deploy   # = vite build, then: wrangler pages deploy dist --project-name=gisnexus-app
+```
+
+The first run will prompt you to log in (`wrangler login`) and to
+confirm/create the `gisnexus-app` Pages project.
+
+Use `wrangler pages deploy`, not the newer unified `wrangler deploy` —
+`wrangler deploy` auto-detects any `vite.config.ts` in the directory and
+routes through its Vite-plugin integration, which currently hard-requires
+Vite 6+ regardless of whether a `wrangler.jsonc` is present. `wrangler pages
+deploy` is the older, purpose-built Pages command: it just uploads the built
+`dist/` folder and never touches that check, so it works fine on this
+project's Vite 5 setup.
+
+Client-side routing (react-router) is handled by `apps/web/public/_redirects`
+(`/* /index.html 200`), which Vite copies into `dist/` on every build — this
+is what makes a direct visit or refresh on a route like `/maps/:id` resolve
+instead of 404ing, standing in for the `not_found_handling:
+single-page-application` setting that only applies to the Workers-assets
+deploy path.
 
 ### 4. Smoke test
 

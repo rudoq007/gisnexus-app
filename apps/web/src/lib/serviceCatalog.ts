@@ -128,4 +128,5 @@ export const SERVICE_TYPE_LABEL: Record<ServiceType, string> = {
   wfs: "WFS",
   arcgis: "ArcGIS",
   geojson: "GeoJSON",
+  image: "Terrain",
 };

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import maplibregl, { LngLatBoundsLike, Map as MapLibreMap, MapLayerMouseEvent  } from "maplibre-gl";
+import maplibregl, { LngLatBoundsLike, Map as MapLibreMap, MapLayerMouseEvent } from "maplibre-gl";
 import { GeoFeature, GeoFeatureCollection, LayerDto } from "../api/client";
 
 // A free, no-API-key raster basemap. Swap for a vector style + MapTiler/Stadia
@@ -23,6 +23,10 @@ interface Props {
   viewState: { center: [number, number]; zoom: number };
   onViewStateChange: (v: { center: [number, number]; zoom: number }) => void;
   onFeatureClick: (layer: LayerDto, feature: GeoFeature, lngLat: [number, number]) => void;
+  // Current viewport bounds, reported on every move — the terrain tools
+  // (Hillshade, ...) run against "whatever's on screen right now" rather
+  // than a layer, so they need this and there's nowhere else to get it.
+  onBoundsChange?: (bounds: { west: number; south: number; east: number; north: number }) => void;
 }
 
 function sourceIdFor(layerId: string) {
@@ -38,10 +42,16 @@ function rasterLayerIdFor(layerId: string) {
   return `lyr-${layerId}-raster`;
 }
 
-export default function MapCanvas({ layers, featuresByLayer, viewState, onViewStateChange, onFeatureClick }: Props) {
+export default function MapCanvas({ layers, featuresByLayer, viewState, onViewStateChange, onFeatureClick, onBoundsChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const loadedRef = useRef(false);
+
+  function reportBounds(map: MapLibreMap) {
+    if (!onBoundsChange) return;
+    const b = map.getBounds();
+    onBoundsChange({ west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() });
+  }
 
   // Initialize map once.
   useEffect(() => {
@@ -56,10 +66,12 @@ export default function MapCanvas({ layers, featuresByLayer, viewState, onViewSt
     map.on("load", () => {
       loadedRef.current = true;
       syncLayers();
+      reportBounds(map);
     });
     map.on("moveend", () => {
       const c = map.getCenter();
       onViewStateChange({ center: [c.lng, c.lat], zoom: map.getZoom() });
+      reportBounds(map);
     });
     mapRef.current = map;
     return () => {
@@ -95,18 +107,29 @@ export default function MapCanvas({ layers, featuresByLayer, viewState, onViewSt
     for (const layer of layers) {
       const srcId = sourceIdFor(layer.id);
 
-      // Raster (service) layers: XYZ/WMS/WMTS tiles rendered live from the
-      // tile URL template built server-side — no featuresByLayer entry, no
-      // click handler (there's no attribute data to show in a popup).
+      // Raster layers come in two flavors:
+      //  - service.type xyz/wms/wmts: live tiles from a tile URL template
+      //    built server-side — no featuresByLayer entry, no click handler.
+      //  - service.type 'image': a single georeferenced image produced
+      //    server-side by a terrain tool (Hillshade, ...) — same idea, just
+      //    a bounded ImageSource instead of a tiled RasterSource.
       if (layer.kind === "raster") {
         if (!layer.service?.url) continue;
         if (!map.getSource(srcId)) {
-          map.addSource(srcId, {
-            type: "raster",
-            tiles: [layer.service.url],
-            tileSize: layer.service.tileSize || 256,
-            attribution: layer.service.attribution,
-          });
+          if (layer.service.type === "image" && layer.service.coordinates) {
+            map.addSource(srcId, {
+              type: "image",
+              url: layer.service.url,
+              coordinates: layer.service.coordinates as [[number, number], [number, number], [number, number], [number, number]],
+            });
+          } else {
+            map.addSource(srcId, {
+              type: "raster",
+              tiles: [layer.service.url],
+              tileSize: layer.service.tileSize || 256,
+              attribution: layer.service.attribution,
+            });
+          }
         }
         const rasterId = rasterLayerIdFor(layer.id);
         if (!map.getLayer(rasterId)) {
@@ -199,7 +222,7 @@ export default function MapCanvas({ layers, featuresByLayer, viewState, onViewSt
   function attachClickHandler(mapLayerId: string, layer: LayerDto) {
     const map = mapRef.current;
     if (!map) return;
-    map.on("click", mapLayerId, (e: MapLayerMouseEvent ) => {
+    map.on("click", mapLayerId, (e: MapLayerMouseEvent) => {
       const feature = e.features?.[0];
       if (!feature) return;
       onFeatureClick(layer, feature as unknown as GeoFeature, [e.lngLat.lng, e.lngLat.lat]);

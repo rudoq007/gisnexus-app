@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, GeoFeature, GeoFeatureCollection, LayerDto, MapDto, MapVisibility } from "../api/client";
+import { api, Bbox, GeoFeature, GeoFeatureCollection, LayerDto, MapDto, MapVisibility } from "../api/client";
 import MapCanvas from "../components/MapCanvas";
 import LayerList from "../components/LayerList";
 import StylePanel from "../components/StylePanel";
@@ -9,11 +9,12 @@ import UploadButton from "../components/UploadButton";
 import DataTable from "../components/DataTable";
 import DashboardChart from "../components/DashboardChart";
 import AnalysisPanel from "../components/AnalysisPanel";
+import TerrainPanel from "../components/TerrainPanel";
 import AddDataPanel from "../components/AddDataPanel";
 import PrintMapModal from "../components/PrintMapModal";
 import { CatalogEntry } from "../lib/serviceCatalog";
 
-type BottomTab = "table" | "dashboard" | "analysis";
+type BottomTab = "table" | "dashboard" | "analysis" | "terrain";
 
 export default function MapEditorPage() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +27,7 @@ export default function MapEditorPage() {
   const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<BottomTab>("table");
+  const [bounds, setBounds] = useState<Bbox | null>(null);
   const [popup, setPopup] = useState<{ layer: LayerDto; feature: GeoFeature; lngLat: [number, number] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -221,6 +223,7 @@ export default function MapEditorPage() {
             viewState={map.view_state}
             onViewStateChange={(v) => api.updateMap(map.id, { view_state: v }).catch(() => {})}
             onFeatureClick={(layer, feature, lngLat) => setPopup({ layer, feature, lngLat })}
+            onBoundsChange={setBounds}
           />
           {popup && (
             <div className="map-popup" onClick={() => setPopup(null)}>
@@ -254,9 +257,18 @@ export default function MapEditorPage() {
           <button className={tab === "analysis" ? "active" : ""} onClick={() => setTab("analysis")}>
             Spatial analysis
           </button>
+          <button className={tab === "terrain" ? "active" : ""} onClick={() => setTab("terrain")}>
+            Terrain
+          </button>
         </div>
         <div className="bottom-content">
-          {!selectedLayer ? (
+          {tab === "terrain" ? (
+            canEdit ? (
+              <TerrainPanel mapId={id!} bounds={bounds} onCreated={loadMap} />
+            ) : (
+              <div className="empty-note">You need edit access to run terrain analysis.</div>
+            )
+          ) : !selectedLayer ? (
             <div className="empty-note">Select a layer to get started.</div>
           ) : selectedLayer.kind === "raster" ? (
             <div className="empty-note">

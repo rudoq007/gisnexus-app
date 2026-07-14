@@ -60,12 +60,16 @@ export interface MapDto {
 }
 export type GeomType = "Point" | "LineString" | "Polygon";
 export type LayerKind = "vector" | "raster";
-export type ServiceType = "xyz" | "wms" | "wmts" | "wfs" | "arcgis" | "geojson";
+// 'image' = a single georeferenced raster produced server-side by a terrain
+// tool (hillshade, ...), rendered as a MapLibre ImageSource rather than a
+// tiled RasterSource — see MapCanvas.tsx.
+export type ServiceType = "xyz" | "wms" | "wmts" | "wfs" | "arcgis" | "geojson" | "image";
 export interface ServiceConfig {
   type: ServiceType;
   url?: string;
   tileSize?: number;
   attribution?: string;
+  coordinates?: [number, number][];
   raw: Record<string, string | number | boolean>;
 }
 export interface LayerDto {
@@ -76,9 +80,15 @@ export interface LayerDto {
   geom_type: GeomType | null;
   style: { color: string; opacity: number; size: number };
   popup_fields: string[];
-  source: "upload" | "buffer" | "intersect" | "service";
+  source: "upload" | "buffer" | "intersect" | "service" | "terrain";
   service: ServiceConfig | null;
   sort_order: number;
+}
+export interface Bbox {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
 }
 export interface AggregateBar {
   label: string;
@@ -150,6 +160,15 @@ export const api = {
     request<{ layer: LayerDto; featureCount: number }>(`/api/layers/${id}/intersects`, {
       method: "POST",
       body: JSON.stringify({ otherLayerId, name }),
+    }),
+
+  // Terrain (GeoLibre-style "Processing" tools, backed by WhiteboxTools — see
+  // apps/api/src/lib/terrain.ts. Hillshade ships first; more (slope, aspect,
+  // contours, watershed) follow the same pattern.)
+  runHillshade: (mapId: string, params: { bbox: Bbox; azimuth?: number; altitude?: number; name?: string }) =>
+    request<{ layer: LayerDto }>(`/api/maps/${mapId}/terrain/hillshade`, {
+      method: "POST",
+      body: JSON.stringify(params),
     }),
 
   // Dashboard
