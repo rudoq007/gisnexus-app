@@ -1,3 +1,24 @@
+#!/usr/bin/env bash
+# GISNEXUS — Fix Watershed: switch the internal FillDepressions -> D8Pointer
+# -> Watershed -> RasterToVectorPolygons chain from ESRI ASCII (.asc)
+# intermediate files to GeoTIFF (.tif). Single-file change (apps/api/src/lib/terrain.ts).
+#
+# Root cause of the error you hit ("D8Pointer failed ... ParseFloatError {
+# kind: Empty } ... arcascii_raster.rs:87"): FillDepressions' own ASCII grid
+# writer produced a file that WhiteboxTools' own D8Pointer ASCII reader
+# couldn't parse — an internal WhiteboxTools writer/reader mismatch, not a
+# bug in our code (the DEM we write ourselves, dem.asc, was read back fine).
+# filled.asc/d8.asc/watershed.asc are pure WhiteboxTools-to-WhiteboxTools
+# handoffs that our own code never reads back, so they're free to use
+# whatever format round-trips reliably — GeoTIFF is binary (no text-parsing
+# edge cases) and WhiteboxTools' most commonly used raster format.
+#
+# Run this from the ROOT of your gisnexus-app repo, in Git Bash:
+#   bash deliver-watershed-fix.sh
+set -e
+
+echo "Writing apps/api/src/lib/terrain.ts ..."
+cat > apps/api/src/lib/terrain.ts <<'EOF'
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
@@ -609,3 +630,14 @@ export async function runWatershed(bbox: Bbox, pourPoint: { lon: number; lat: nu
     await fs.rm(workDir, { recursive: true, force: true }).catch(() => {});
   }
 }
+EOF
+
+echo ""
+echo "Done writing files. Now review, build, and push:"
+echo ""
+echo "  git status"
+echo "  git diff --stat"
+echo "  npm run build --workspace=apps/api"
+echo "  git add -A"
+echo "  git commit -m \"Fix Watershed: use GeoTIFF for internal FillDepressions/D8Pointer/Watershed handoffs\""
+echo "  git push"
