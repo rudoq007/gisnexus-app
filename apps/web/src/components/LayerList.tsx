@@ -8,15 +8,17 @@ interface Props {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onDownload: (id: string) => void;
+  onZoomToLayer: (id: string) => void;
   canEdit: boolean;
 }
 
-// A layer is downloadable if it's vector data (uploads, buffer/intersect
-// results, Contours, Watershed, ...) or a single georeferenced raster image
-// produced by a terrain tool (Hillshade/Slope/Aspect). Tile-service raster
-// layers (XYZ/WMS/WMTS basemaps added via "Add data") are a live service,
-// not a fixed dataset, so there's nothing to export.
-function isDownloadable(layer: LayerDto) {
+// A layer has a fixed, known extent — something worth downloading or
+// zooming to — if it's vector data (uploads, buffer/intersect results,
+// Contours, Watershed, ...) or a single georeferenced raster image produced
+// by a terrain tool (Hillshade/Slope/Aspect). Tile-service raster layers
+// (XYZ/WMS/WMTS basemaps added via "Add data") are a live streaming
+// service with no stored bounds, so neither action applies to them.
+function hasFixedExtent(layer: LayerDto) {
   return layer.kind !== "raster" || layer.service?.type === "image";
 }
 
@@ -28,6 +30,7 @@ export default function LayerList({
   onSelect,
   onDelete,
   onDownload,
+  onZoomToLayer,
   canEdit,
 }: Props) {
   if (!layers.length) {
@@ -54,7 +57,19 @@ export default function LayerList({
             <span className="swatch" style={{ background: layer.style.color }} />
           )}
           <span className="name">{layer.name}</span>
-          {isDownloadable(layer) && (
+          {hasFixedExtent(layer) && (
+            <button
+              className="zoom"
+              title="Zoom to layer"
+              onClick={(e) => {
+                e.stopPropagation();
+                onZoomToLayer(layer.id);
+              }}
+            >
+              ⌖
+            </button>
+          )}
+          {hasFixedExtent(layer) && (
             <button
               className="dl"
               title="Download layer"

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, Bbox, GeoFeature, GeoFeatureCollection, LayerDto, MapDto, MapVisibility } from "../api/client";
-import MapCanvas from "../components/MapCanvas";
+import MapCanvas, { MapCanvasHandle } from "../components/MapCanvas";
 import LayerList from "../components/LayerList";
 import StylePanel from "../components/StylePanel";
 import PopupConfigPanel from "../components/PopupConfigPanel";
@@ -14,12 +14,14 @@ import AddDataPanel from "../components/AddDataPanel";
 import PrintMapModal from "../components/PrintMapModal";
 import { CatalogEntry } from "../lib/serviceCatalog";
 import { downloadRasterLayer, downloadVectorLayer } from "../lib/downloadLayer";
+import { boundsFromFeatureCollection } from "../lib/geoBounds";
 
 type BottomTab = "table" | "dashboard" | "analysis" | "terrain";
 
 export default function MapEditorPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const mapCanvasRef = useRef<MapCanvasHandle>(null);
 
   const [map, setMap] = useState<MapDto | null>(null);
   const [role, setRole] = useState<string>("viewer");
@@ -128,10 +130,10 @@ export default function MapEditorPage() {
 
   // Vector layers already have their full feature set in featuresByLayer
   // (fetched up front by loadMap), so that path is synchronous and can't
-  // fail beyond "not loaded yet". Raster (image) layers re-encode the PNG
-  // as a GeoTIFF in the browser (see lib/downloadLayer.ts) — that's the
-  // least-proven part of this feature, so its errors are surfaced via the
-  // same error banner as everything else rather than silently swallowed.
+  // fail beyond "not loaded yet". Raster (image) layers ship the PNG plus a
+  // world file (see lib/downloadLayer.ts) — errors there (e.g. the image
+  // failing to decode) are surfaced via the same error banner as everything
+  // else rather than silently swallowed.
   function handleDownloadLayer(layerId: string) {
     const layer = layers.find((l) => l.id === layerId);
     if (!layer) return;
@@ -147,6 +149,40 @@ export default function MapEditorPage() {
         return;
       }
       downloadVectorLayer(layer, fc);
+    }
+  }
+
+  // "Zoom to layer" — flies the map to a layer's extent so it's findable
+  // without manual panning/zooming (this matters most for small results
+  // like a Watershed polygon, which can be a tiny fraction of the current
+  // view and easy to lose track of). Raster (image) layers already carry
+  // their bounds in service.coordinates; vector layers' bounds are derived
+  // from their already-loaded features. Uses MapCanvas's imperative handle
+  // rather than a prop, since the same bounds might be requested twice in a
+  // row (re-clicking the same layer), which wouldn't re-trigger a
+  // useEffect keyed on a prop that hadn't changed.
+  function handleZoomToLayer(layerId: string) {
+    const layer = layers.find((l) => l.id === layerId);
+    if (!layer) return;
+    setError(null);
+    if (layer.kind === "raster") {
+      const coords = layer.service?.coordinates;
+      if (!coords || coords.length < 4) {
+        setError("This layer doesn't have a fixed extent to zoom to.");
+        return;
+      }
+      const [west, north] = coords[0];
+      const [east] = coords[1];
+      const [, south] = coords[2];
+      mapCanvasRef.current?.fitToBounds({ west, south, east, north });
+    } else {
+      const fc = featuresByLayer[layerId];
+      const bounds = fc ? boundsFromFeatureCollection(fc) : null;
+      if (!bounds) {
+        setError("This layer has no features to zoom to yet.");
+        return;
+      }
+      mapCanvasRef.current?.fitToBounds(bounds);
     }
   }
 
@@ -226,6 +262,7 @@ export default function MapEditorPage() {
               onSelect={setSelectedId}
               onDelete={handleDeleteLayer}
               onDownload={handleDownloadLayer}
+              onZoomToLayer={handleZoomToLayer}
             />
           </div>
           {selectedLayer && canEdit && selectedLayer.kind === "raster" ? (
@@ -258,6 +295,7 @@ export default function MapEditorPage() {
 
         <div className="map-wrap">
           <MapCanvas
+            ref={mapCanvasRef}
             layers={visibleLayers}
             featuresByLayer={featuresByLayer}
             viewState={map.view_state}

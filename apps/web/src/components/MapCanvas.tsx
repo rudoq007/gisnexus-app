@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import maplibregl, { LngLatBoundsLike, Map as MapLibreMap, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
-import { GeoFeature, GeoFeatureCollection, LayerDto } from "../api/client";
+import { Bbox, GeoFeature, GeoFeatureCollection, LayerDto } from "../api/client";
 
 // A free, no-API-key raster basemap. Swap for a vector style + MapTiler/Stadia
 // key in production for sharper rendering — see README "Basemap tiles".
@@ -37,6 +37,15 @@ interface Props {
   pickMarker?: [number, number] | null;
 }
 
+// Imperative actions the parent (MapEditorPage) can trigger directly, for
+// things that are one-off commands rather than state the map should keep
+// reacting to — e.g. "zoom to this specific layer's extent" doesn't fit the
+// usual prop-driven-by-state pattern (the same bounds could be requested
+// twice in a row, which wouldn't re-trigger a useEffect keyed on that prop).
+export interface MapCanvasHandle {
+  fitToBounds: (bbox: Bbox) => void;
+}
+
 function sourceIdFor(layerId: string) {
   return `src-${layerId}`;
 }
@@ -50,20 +59,28 @@ function rasterLayerIdFor(layerId: string) {
   return `lyr-${layerId}-raster`;
 }
 
-export default function MapCanvas({
-  layers,
-  featuresByLayer,
-  viewState,
-  onViewStateChange,
-  onFeatureClick,
-  onBoundsChange,
-  onMapClick,
-  pickMarker,
-}: Props) {
+const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas(
+  { layers, featuresByLayer, viewState, onViewStateChange, onFeatureClick, onBoundsChange, onMapClick, pickMarker },
+  ref
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const loadedRef = useRef(false);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    fitToBounds(bbox: Bbox) {
+      const map = mapRef.current;
+      if (!map) return;
+      map.fitBounds(
+        [
+          [bbox.west, bbox.south],
+          [bbox.east, bbox.north],
+        ],
+        { padding: 80, maxZoom: 18, duration: 600 }
+      );
+    },
+  }));
 
   // The map-init effect below only runs once (empty deps), so it captures
   // whatever onMapClick was passed at mount time. Unlike onBoundsChange/
@@ -308,4 +325,6 @@ export default function MapCanvas({
   }, [featuresByLayer]);
 
   return <div ref={containerRef} className="map-canvas-el" />;
-}
+});
+
+export default MapCanvas;
