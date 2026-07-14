@@ -1,3 +1,23 @@
+#!/usr/bin/env bash
+# Fixes the unhelpful "Invalid request" error shown when a terrain tool (or
+# any other validated API call) is rejected — the server was catching the
+# validation error but always replying with the generic string "Invalid
+# request.", discarding the specific, human-readable reason (e.g. "Zoom in
+# further — terrain analysis only works on an area up to about 2° across."
+# or a specific field being out of range). The frontend already shows
+# whatever the server sends back verbatim, so this alone makes every future
+# validation error across the whole app (not just terrain tools) tell you
+# exactly what was wrong.
+#
+# This is a BACKEND (apps/api) file — it deploys to Render, not Cloudflare
+# Pages, and needs `npm run build --workspace=apps/api`, not apps/web.
+#
+# Run this from the root of your gisnexus-app checkout:
+#   bash deliver-error-message-fix.sh
+set -euo pipefail
+
+echo "Writing apps/api/src/middleware/errorHandler.ts ..."
+cat > apps/api/src/middleware/errorHandler.ts <<'EOF'
 import { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 
@@ -45,3 +65,20 @@ export function asyncRoute<T extends (...args: any[]) => Promise<any>>(fn: T) {
     fn(req, res, next).catch(next);
   };
 }
+EOF
+
+echo ""
+echo "Done writing file. Now review, build, and push:"
+echo ""
+echo "  git status"
+echo "  git diff --stat"
+echo "  npm run build --workspace=apps/api"
+echo "  git add -A"
+echo "  git commit -m \"Surface the real validation reason instead of generic 'Invalid request'\""
+echo "  git push"
+echo ""
+echo "This deploys to Render (the API), not Cloudflare Pages — after pushing,"
+echo "check Render's dashboard for the deploy to finish, then try Hillshade"
+echo "again. The error banner should now say something specific instead of"
+echo "just 'Invalid request' — send me that exact new message if it still"
+echo "fails and I can pin down the root cause immediately."
