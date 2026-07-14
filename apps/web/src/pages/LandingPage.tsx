@@ -71,12 +71,12 @@ function Logo({ small }: { small?: boolean }) {
   const s = small ? 24 : 30;
   return (
     <svg width={s} height={s} viewBox="0 0 32 32" fill="none">
-      <rect width="32" height="32" rx="8" fill="#1F5F4A" />
+      <rect width="32" height="32" rx="8" fill="#7c5cff" />
       <path d="M6 21L12 12L17 18L22 9L26 15" stroke="#E9F2EE" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
       {!small && (
         <>
-          <circle cx="12" cy="12" r="1.8" fill="#E08E45" />
-          <circle cx="22" cy="9" r="1.8" fill="#E08E45" />
+          <circle cx="12" cy="12" r="1.8" fill="#22d3ee" />
+          <circle cx="22" cy="9" r="1.8" fill="#22d3ee" />
         </>
       )}
     </svg>
@@ -142,9 +142,9 @@ export default function LandingPage() {
             </div>
             <div className="landing-map-canvas">
               <svg viewBox="0 0 1000 380" preserveAspectRatio="none">
-                <path d="M0 260 L120 240 L220 270 L340 230 L460 255 L600 210 L720 245 L860 220 L1000 250 L1000 380 L0 380 Z" fill="#CFE6DB" />
-                <path d="M0 300 L150 285 L280 305 L420 280 L560 300 L700 270 L860 295 L1000 280 L1000 380 L0 380 Z" fill="#B9DBC9" />
-                <g stroke="#8FC2AA" strokeWidth="1.5" opacity="0.6">
+                <path d="M0 260 L120 240 L220 270 L340 230 L460 255 L600 210 L720 245 L860 220 L1000 250 L1000 380 L0 380 Z" fill="#171b34" />
+                <path d="M0 300 L150 285 L280 305 L420 280 L560 300 L700 270 L860 295 L1000 280 L1000 380 L0 380 Z" fill="#11142a" />
+                <g stroke="rgba(124,92,255,0.35)" strokeWidth="1.5" opacity="0.8">
                   <path d="M0 100 H1000" />
                   <path d="M0 160 H1000" />
                   <path d="M0 220 H1000" />
@@ -153,21 +153,21 @@ export default function LandingPage() {
                   <path d="M650 0 V380" />
                   <path d="M900 0 V380" />
                 </g>
-                <circle cx="300" cy="150" r="7" fill="#1F5F4A" />
-                <circle cx="430" cy="120" r="7" fill="#1F5F4A" />
-                <circle cx="520" cy="190" r="7" fill="#E08E45" />
-                <circle cx="620" cy="140" r="7" fill="#1F5F4A" />
-                <circle cx="700" cy="200" r="7" fill="#1F5F4A" />
-                <circle cx="760" cy="110" r="7" fill="#E08E45" />
-                <path d="M300 150 L430 120 L620 140 L700 200" stroke="#1F5F4A" strokeWidth="2" fill="none" strokeDasharray="4 4" />
+                <circle cx="300" cy="150" r="7" fill="#7c5cff" />
+                <circle cx="430" cy="120" r="7" fill="#7c5cff" />
+                <circle cx="520" cy="190" r="7" fill="#22d3ee" />
+                <circle cx="620" cy="140" r="7" fill="#7c5cff" />
+                <circle cx="700" cy="200" r="7" fill="#7c5cff" />
+                <circle cx="760" cy="110" r="7" fill="#22d3ee" />
+                <path d="M300 150 L430 120 L620 140 L700 200" stroke="#7c5cff" strokeWidth="2" fill="none" strokeDasharray="4 4" />
               </svg>
               <div className="landing-layer-panel">
                 <h4>Layers</h4>
                 <div className="landing-layer-row">
-                  <span className="landing-swatch" style={{ background: "#1F5F4A" }} /> Zoning parcels
+                  <span className="landing-swatch" style={{ background: "#7c5cff" }} /> Zoning parcels
                 </div>
                 <div className="landing-layer-row">
-                  <span className="landing-swatch" style={{ background: "#E08E45" }} /> Flood risk zones
+                  <span className="landing-swatch" style={{ background: "#22d3ee" }} /> Flood risk zones
                 </div>
                 <div className="landing-layer-row">
                   <span className="landing-swatch" style={{ background: "#4FAE7A" }} /> Transit routes
